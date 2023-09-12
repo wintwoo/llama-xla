@@ -31,6 +31,7 @@ logger.setLevel(logging.DEBUG)
 
 os.environ["PJRT_DEVICE"] = "TPU"
 os.environ["XLA_USE_BF16"] = "1"
+os.environ["PT_XLA_DEBUG"] = "1"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=str)
@@ -45,6 +46,8 @@ parser.add_argument("--block_size", type=int, default=1024)
 parser.add_argument("--enable_profiling", action="store_true", default=False)
 parser.add_argument("--profile_steps", type=int, default=100)
 parser.add_argument("--num_epochs", type=int, default=3)
+parser.add_argument("--report_steps", type=int)
+parser.add_argument("--logging_steps", type=int)
 args = parser.parse_args()
 
 
@@ -109,10 +112,10 @@ def main(index):
     tracker = xm.RateTracker()
 
     # Training loop
-    for epoch in range(1, args.num_epochs):
+    for epoch in range(0, args.num_epochs):
         with tqdm(data_loader) as tepoch:
             for step, batch in enumerate(tepoch):
-                tepoch.set_description(f"Epoch {epoch}")
+                tepoch.set_description(f"Epoch {epoch+1}")
                 optimizer.zero_grad()
                 outputs = model(**batch)
                 loss = outputs.loss
@@ -120,10 +123,13 @@ def main(index):
                 optimizer.step() # do not reduce gradients on sharded params
                 lr_scheduler.step()
                 tracker.add(args.batch_size)
-                
-                if step % 10 == 0:
+
+                if args.logging_steps is not None and step % args.logging_steps == 0:
                     xm.add_step_closure(print_info, (step, loss, tracker))
-                
+
+                if args.report_steps is not None and step % args.report_steps == 0:
+                    xm.master_print(met.metrics_report())
+
                 if args.enable_profiling:
                     if step % args.profile_steps == 0 and xm.is_master_ordinal():
                         logger.info("start profiling")
