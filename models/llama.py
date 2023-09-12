@@ -26,7 +26,7 @@ def _xla_fsdp_wrap(module, use_grad_checkpoint=True):
 
 
 def get_wrapped_llama_from_config(config, use_grad_checkpoint=True):
-    model = LlamaXlaFsdpModel(config)
+    model = LlamaXlaFsdpForCausalLM(config)
     # Wrap model at root
     forward_signature = inspect.signature(model.forward.__func__)
     model = _xla_fsdp_wrap(model, use_grad_checkpoint=use_grad_checkpoint)
