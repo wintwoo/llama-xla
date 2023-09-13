@@ -11,12 +11,10 @@ import torch_xla.core.xla_model as xm
 import torch_xla.distributed.xla_multiprocessing as xmp
 import torch_xla.experimental.pjrt_backend
 import torch_xla.experimental.pjrt as pjrt
-import torch.distributed as dist
 import torch_xla.debug.metrics as met
 import torch_xla.debug.profiler as xp
 from transformers import (
     AutoTokenizer,
-    LlamaConfig,
     get_scheduler,
 )
 import torch_xla.distributed.parallel_loader as pl
@@ -24,14 +22,17 @@ from torch_xla.amp.syncfree import AdamW
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from threading import Thread
-from models.llama import get_wrapped_llama_from_config
-from utils import datasets
+from utils import (
+    datasets as dataset_utils,
+    models as model_utils,
+)
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 os.environ["PJRT_DEVICE"] = "TPU"
+os.environ["XLA_USE_BF16"] = "1"
 # os.environ["PT_XLA_DEBUG"] = "1"
 
 parser = argparse.ArgumentParser()
@@ -56,14 +57,14 @@ args = parser.parse_args()
 def main(index):
 
     logger.info(
-        f"Ordinal: {xm.get_ordinal()}, "
-        f"Local Ordinal: {xm.get_local_ordinal()}, "
-        f"World Size: {xm.xrt_world_size()}"
+        f"ordinal: {xm.get_ordinal()}, "
+        f"local ordinal: {xm.get_local_ordinal()}, "
+        f"world size: {xm.xrt_world_size()}"
     )
 
     if args.enable_profiling:
         server = xp.start_server(9012)
-        logger.info(f"Profiling server started: {str(server)}")
+        logging.info(f"Profiling server started: {str(server)}")
 
     dev = xm.xla_device()
 
@@ -71,8 +72,8 @@ def main(index):
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
 
     # training dataset
-    dataset = datasets.load_and_process_dataset(
-        dataset=args.dataset,
+    dataset = dataset_utils.load_and_process_dataset(
+        dataset_name=args.dataset,
         tokenizer=tokenizer,
         detect_columns_from_split=args.train_split,
         block_size=args.block_size,
@@ -83,13 +84,7 @@ def main(index):
     data_loader = pl.MpDeviceLoader(data_loader, dev)
 
     # model
-    logger.info("Loading model")
-    config = LlamaConfig.from_pretrained(args.config)
-    model = get_wrapped_llama_from_config(
-        config, presharded_checkpoints=args.presharded_checkpoints
-    )
-    model.train()
-    xm.master_print(model)
+    model = model_utils.load_model(args.config, args.presharded_checkpoints)
 
     # optimizer
     optimizer = AdamW(model.parameters(), lr=1e-5)
@@ -109,8 +104,9 @@ def main(index):
             f"Step: {step}, Loss: {loss_value}, Rate: {tracker.rate()}, Global Rate: {tracker.global_rate()}"
         )
 
-    # training loop
+    training loop
     tracker = xm.RateTracker()
+    xm.master_print(model)
     for epoch in range(0, args.num_epochs):
         with tqdm(data_loader) as tepoch:
             for step, batch in enumerate(tepoch):
@@ -142,6 +138,9 @@ def main(index):
                             "127.0.0.1:9012", tempfile.mkdtemp(), 20000
                         )
                         Thread(target=trace).start()
+
+    # save and consolidate checkpoints
+    model_utils.save_model(model, optimizer, output_dir)
 
 
 if __name__ == "__main__":

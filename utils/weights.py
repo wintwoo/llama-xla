@@ -5,9 +5,9 @@ import os
 import re
 import torch
 
-logging.basicConfig(format='%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-    datefmt='%Y-%m-%d:%H:%M:%S',
-    level=logging.INFO)
+logging.basicConfig()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 EXACT_MATCH_WEIGHTS = [
     "lm_head.weight", 
@@ -35,11 +35,11 @@ def reshard_and_save_weights(model_dir: str, output_dir: str):
     p = re.compile(DECODER_LAYER_REGEX)
 
     for f in ckpt_files:
-        logging.info(f"processing {f}")
+        logger.info(f"processing {f}")
         ckpt = torch.load(os.path.join(model_dir, f))
         for weight in ckpt.keys():
             if weight in EXACT_MATCH_WEIGHTS:
-                logging.info(f"saving weights to {weight}")
+                logger.info(f"saving weights to {weight}")
                 weight_dict = {
                     weight: ckpt[weight]
                 }
@@ -53,7 +53,7 @@ def reshard_and_save_weights(model_dir: str, output_dir: str):
                     grouped_weights[block_name][match.group(2)] = ckpt[weight]
         
         for layer in grouped_weights.keys():
-            logging.info(f"saving weights for layer {layer}")
+            logger.info(f"saving weights for layer {layer}")
             torch.save(grouped_weights[layer], os.path.join(output_dir, f"{layer}.bin"))
 
 def main():

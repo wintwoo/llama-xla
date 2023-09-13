@@ -101,7 +101,7 @@ class LlamaXlaFsdpForCausalLM(LlamaForCausalLM):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         
-        if presharded_checkpoints is None:
+        if presharded_checkpoints is not None:
             with torch.no_grad():
                 logger.debug("Using checkpoint weights for LM head")
                 ckpt = torch.load(os.path.join(presharded_checkpoints, "lm_head.weight.bin"))
