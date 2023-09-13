@@ -104,7 +104,7 @@ def main(index):
             f"Step: {step}, Loss: {loss_value}, Rate: {tracker.rate()}, Global Rate: {tracker.global_rate()}"
         )
 
-    training loop
+    # training loop
     tracker = xm.RateTracker()
     xm.master_print(model)
     for epoch in range(0, args.num_epochs):
