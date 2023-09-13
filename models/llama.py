@@ -1,4 +1,5 @@
 import inspect
+import os
 import torch
 from torch import nn
 from torch_xla.distributed.fsdp import (
@@ -31,8 +32,7 @@ def get_wrapped_llama_from_config(config, use_grad_checkpoint=True):
     forward_signature = inspect.signature(model.forward.__func__)
     model = _xla_fsdp_wrap(model, use_grad_checkpoint=use_grad_checkpoint)
     model.forward.__func__.__signature__ = forward_signature
-    return model
-
+    return
 
 class LlamaXlaFsdpModel(LlamaModel):
 
