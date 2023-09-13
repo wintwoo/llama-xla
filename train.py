@@ -4,6 +4,7 @@ import logging
 from math import ceil
 import os
 from preprocessing import utils as preproc_utils
+from utils.weights import reshard_and_save_weights
 
 import tempfile
 import torch_xla.core.xla_model as xm
@@ -23,11 +24,11 @@ from torch_xla.amp.syncfree import AdamW
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from threading import Thread
-from transformers.modeling_utils import xla_fsdp_wrap
 from models.llama import get_wrapped_llama_from_config
 
+logging.basicConfig()
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 os.environ["PJRT_DEVICE"] = "TPU"
 os.environ["XLA_USE_BF16"] = "1"
@@ -36,6 +37,9 @@ os.environ["PT_XLA_DEBUG"] = "1"
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=str)
 parser.add_argument("--model", type=str)
+parser.add_argument("--presharded_checkpoints", type=str)
+parser.add_argument("--reshard_checkpoints", action="store_true")
+parser.add_argument("--reshard_on_master_only", action="store_true")
 parser.add_argument("--num_cores", type=int)
 parser.add_argument("--dataset", type=str)
 parser.add_argument("--tokenizer", type=str)
@@ -53,7 +57,7 @@ args = parser.parse_args()
 
 def main(index):
 
-    print(f"Ordinal: {xm.get_ordinal()}, Local Ordinal: {xm.get_local_ordinal()}, World Size: {xm.xrt_world_size()}")
+    logger.info(f"Ordinal: {xm.get_ordinal()}, Local Ordinal: {xm.get_local_ordinal()}, World Size: {xm.xrt_world_size()}")
 
     if args.enable_profiling:
         server = xp.start_server(9012)
@@ -62,18 +66,18 @@ def main(index):
     def print_info(step, loss, tracker):
         loss_value = loss.item()
         xm.master_print(
-            f"step: {step}, loss: {loss_value}, rate: {tracker.rate()}, global rate: {tracker.global_rate()}"
+            f"Step: {step}, Loss: {loss_value}, Rate: {tracker.rate()}, Global Rate: {tracker.global_rate()}"
         )
 
     dev = xm.xla_device()
 
-    # Tokenizer
+    # tokenizer
     if args.tokenizer is None:
         args.tokenizer = args.model
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
 
-    # Training dataset
+    # training dataset
     dataset = datasets.load_dataset(args.dataset)
     column_names = list(dataset[args.train_split].features)
     preproc_func = preproc_utils.get_preprocessed_dataset(args.dataset)
@@ -90,17 +94,31 @@ def main(index):
     )
     train_dataset = packed_dataset.with_format("torch")
 
-    # Data loader
+    # data loader
     data_loader = DataLoader(train_dataset[args.train_split], batch_size=args.batch_size)
     data_loader = pl.MpDeviceLoader(data_loader, dev)
 
-    # Model
-    logging.info("loading model")
-    config = LlamaConfig.from_pretrained(args.config)
-    model = get_wrapped_llama_from_config(config)
-    model.train()
+    # checkpoint sharding
+    if args.reshard_checkpoints:
+        if not args.presharded_checkpoints:
+            xm.master_print("--presharded_checkpoints must be set when specifying --reshard_checkpoints")
+            exit(1)
+        if args.reshard_on_master_only:
+            logger.warning("Resharding master only. You must ensure that all ranks can read the resharded checkpoint files!")
+            if xm.is_master_ordinal():
+                reshard_and_save_weights(args.model, args.presharded_checkpoints)
+        else:
+            # reshard checkpoints on every worker
+            reshard_and_save_weights(args.model, args.presharded_checkpoints)
 
-    # Optimizer
+    # model
+    logger.info("Loading model")
+    config = LlamaConfig.from_pretrained(args.config)
+    model = get_wrapped_llama_from_config(config, presharded_checkpoints=args.presharded_checkpoints)
+    model.train()
+    xm.master_print(model)
+
+    # optimizer
     optimizer = AdamW(model.parameters(), lr=1e-5)
     lr_scheduler = get_scheduler(
         name="linear",
@@ -111,7 +129,7 @@ def main(index):
 
     tracker = xm.RateTracker()
 
-    # Training loop
+    # training loop
     for epoch in range(0, args.num_epochs):
         with tqdm(data_loader) as tepoch:
             for step, batch in enumerate(tepoch):

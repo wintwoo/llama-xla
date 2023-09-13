@@ -1,9 +1,13 @@
 import argparse
 import json
+import logging
 import os
 import re
 import torch
 
+logging.basicConfig(format='%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
+    datefmt='%Y-%m-%d:%H:%M:%S',
+    level=logging.INFO)
 
 EXACT_MATCH_WEIGHTS = [
     "lm_head.weight", 
@@ -11,7 +15,7 @@ EXACT_MATCH_WEIGHTS = [
     "model.norm.weight",
 ]
 
-DECODER_LAYER_REGEX = r"(model\.layers\.[0-9]*).*"
+DECODER_LAYER_REGEX = r"(model\.layers\.[0-9]*)\.(.*)"
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -31,29 +35,26 @@ def reshard_and_save_weights(model_dir: str, output_dir: str):
     p = re.compile(DECODER_LAYER_REGEX)
 
     for f in ckpt_files:
-        print(f"Loading {f} ... ", end="", flush=True)
+        logging.info(f"processing {f}")
         ckpt = torch.load(os.path.join(model_dir, f))
-        print("Done!")
         for weight in ckpt.keys():
             if weight in EXACT_MATCH_WEIGHTS:
-                print(f"Saving {weight} ... ", end="", flush=True)
+                logging.info(f"saving weights to {weight}")
                 weight_dict = {
                     weight: ckpt[weight]
                 }
                 torch.save(weight_dict, os.path.join(output_dir, f"{weight}.bin"))
-                print("Done!")
             else:
                 match = p.search(weight)
                 if match and match.group(1):
                     block_name = match.group(1)
                     if block_name not in grouped_weights.keys():
                         grouped_weights[block_name] = {}
-                    grouped_weights[block_name][weight] = ckpt[weight]
+                    grouped_weights[block_name][match.group(2)] = ckpt[weight]
         
         for layer in grouped_weights.keys():
-            print(f"Saving weights for layer {layer} ... ", end="", flush=True)
+            logging.info(f"saving weights for layer {layer}")
             torch.save(grouped_weights[layer], os.path.join(output_dir, f"{layer}.bin"))
-            print("Done!")
 
 def main():
     args = parse_args()
