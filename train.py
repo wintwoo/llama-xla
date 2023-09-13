@@ -1,5 +1,4 @@
 import argparse
-import datasets
 import logging
 from math import ceil
 import os
@@ -7,6 +6,7 @@ from preprocessing import utils as preproc_utils
 from utils.weights import reshard_and_save_weights
 
 import tempfile
+import torch
 import torch_xla.core.xla_model as xm
 import torch_xla.distributed.xla_multiprocessing as xmp
 import torch_xla.experimental.pjrt_backend
@@ -25,24 +25,22 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from threading import Thread
 from models.llama import get_wrapped_llama_from_config
+from utils import datasets
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 os.environ["PJRT_DEVICE"] = "TPU"
-os.environ["XLA_USE_BF16"] = "1"
-os.environ["PT_XLA_DEBUG"] = "1"
+# os.environ["PT_XLA_DEBUG"] = "1"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=str)
-parser.add_argument("--model", type=str)
 parser.add_argument("--presharded_checkpoints", type=str)
-parser.add_argument("--reshard_checkpoints", action="store_true")
-parser.add_argument("--reshard_on_master_only", action="store_true")
 parser.add_argument("--num_cores", type=int)
 parser.add_argument("--dataset", type=str)
-parser.add_argument("--tokenizer", type=str)
+parser.add_argument("--output_dir", type=str, required=True)
+parser.add_argument("--tokenizer", type=str, required=True)
 parser.add_argument("--batch_size", type=int, default=8)
 parser.add_argument("--train_split", type=str, default="train")
 parser.add_argument("--train_steps", type=int, default=1000)
@@ -57,11 +55,53 @@ args = parser.parse_args()
 
 def main(index):
 
-    logger.info(f"Ordinal: {xm.get_ordinal()}, Local Ordinal: {xm.get_local_ordinal()}, World Size: {xm.xrt_world_size()}")
+    logger.info(
+        f"Ordinal: {xm.get_ordinal()}, "
+        f"Local Ordinal: {xm.get_local_ordinal()}, "
+        f"World Size: {xm.xrt_world_size()}"
+    )
 
     if args.enable_profiling:
         server = xp.start_server(9012)
         logger.info(f"Profiling server started: {str(server)}")
+
+    dev = xm.xla_device()
+
+    # tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+
+    # training dataset
+    dataset = datasets.load_and_process_dataset(
+        dataset=args.dataset,
+        tokenizer=tokenizer,
+        detect_columns_from_split=args.train_split,
+        block_size=args.block_size,
+    )
+
+    # data loader
+    data_loader = DataLoader(dataset[args.train_split], batch_size=args.batch_size)
+    data_loader = pl.MpDeviceLoader(data_loader, dev)
+
+    # model
+    logger.info("Loading model")
+    config = LlamaConfig.from_pretrained(args.config)
+    model = get_wrapped_llama_from_config(
+        config, presharded_checkpoints=args.presharded_checkpoints
+    )
+    model.train()
+    xm.master_print(model)
+
+    # optimizer
+    optimizer = AdamW(model.parameters(), lr=1e-5)
+    num_training_steps = args.num_epochs * ceil(
+        len(dataset[args.train_split]) / args.batch_size
+    )
+    lr_scheduler = get_scheduler(
+        name="linear",
+        optimizer=optimizer,
+        num_warmup_steps=0,
+        num_training_steps=num_training_steps,
+    )
 
     def print_info(step, loss, tracker):
         loss_value = loss.item()
@@ -69,63 +109,8 @@ def main(index):
             f"Step: {step}, Loss: {loss_value}, Rate: {tracker.rate()}, Global Rate: {tracker.global_rate()}"
         )
 
-    dev = xm.xla_device()
-
-    # tokenizer
-    if args.tokenizer is None:
-        args.tokenizer = args.model
-
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
-
-    # training dataset
-    dataset = datasets.load_dataset(args.dataset)
-    column_names = list(dataset[args.train_split].features)
-    preproc_func = preproc_utils.get_preprocessed_dataset(args.dataset)
-    tokenized_dataset = dataset.map(
-        lambda x: preproc_func(x, tokenizer),
-        batched=True,
-        num_proc=args.num_cores,
-        remove_columns=column_names,
-    )
-    packed_dataset = tokenized_dataset.map(
-        lambda x: preproc_utils.group_texts(x, block_size=args.block_size),
-        batched=True,
-        num_proc=args.num_cores,
-    )
-    train_dataset = packed_dataset.with_format("torch")
-
-    # data loader
-    data_loader = DataLoader(train_dataset[args.train_split], batch_size=args.batch_size)
-    data_loader = pl.MpDeviceLoader(data_loader, dev)
-
-    # checkpoint sharding
-    if args.reshard_checkpoints:
-        if not args.presharded_checkpoints:
-            xm.master_print("--presharded_checkpoints must be set when specifying --reshard_checkpoints")
-            exit(1)
-        logger.warning("Resharding master only. You must ensure that all ranks can read the resharded checkpoint files!")
-        if xm.is_master_ordinal():
-            reshard_and_save_weights(args.model, args.presharded_checkpoints)
-
-    # model
-    logger.info("Loading model")
-    config = LlamaConfig.from_pretrained(args.config)
-    model = get_wrapped_llama_from_config(config, presharded_checkpoints=args.presharded_checkpoints)
-    model.train()
-    xm.master_print(model)
-
-    # optimizer
-    optimizer = AdamW(model.parameters(), lr=1e-5)
-    lr_scheduler = get_scheduler(
-        name="linear",
-        optimizer=optimizer,
-        num_warmup_steps=0,
-        num_training_steps=args.num_epochs*ceil(len(train_dataset)/args.batch_size),
-    )
-
-    tracker = xm.RateTracker()
-
     # training loop
+    tracker = xm.RateTracker()
     for epoch in range(0, args.num_epochs):
         with tqdm(data_loader) as tepoch:
             for step, batch in enumerate(tepoch):
@@ -134,24 +119,29 @@ def main(index):
                 outputs = model(**batch)
                 loss = outputs.loss
                 loss.backward()
-                optimizer.step() # do not reduce gradients on sharded params
+                optimizer.step()  # do not reduce gradients on sharded params
                 lr_scheduler.step()
                 tracker.add(args.batch_size)
 
-                if args.logging_steps is not None and step % args.logging_steps == 0:
+                if args.logging_steps is not None and (
+                    step % args.logging_steps == 0
+                    or num_training_steps == step * (epoch + 1)
+                ):
                     xm.add_step_closure(print_info, (step, loss, tracker))
 
-                if args.report_steps is not None and step % args.report_steps == 0:
+                if args.report_steps is not None and (
+                    step % args.report_steps == 0
+                    or num_training_steps == step * (epoch + 1)
+                ):
                     xm.master_print(met.metrics_report())
 
                 if args.enable_profiling:
                     if step % args.profile_steps == 0 and xm.is_master_ordinal():
                         logger.info("start profiling")
-                        trace = lambda: xp.trace('127.0.0.1:9012', tempfile.mkdtemp(), 20000)
+                        trace = lambda: xp.trace(
+                            "127.0.0.1:9012", tempfile.mkdtemp(), 20000
+                        )
                         Thread(target=trace).start()
-
-    # For full report that includes all metrics.
-    xm.master_print(met.metrics_report())
 
 
 if __name__ == "__main__":
