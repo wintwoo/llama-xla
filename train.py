@@ -103,12 +103,8 @@ def main(index):
         if not args.presharded_checkpoints:
             xm.master_print("--presharded_checkpoints must be set when specifying --reshard_checkpoints")
             exit(1)
-        if args.reshard_on_master_only:
-            logger.warning("Resharding master only. You must ensure that all ranks can read the resharded checkpoint files!")
-            if xm.is_master_ordinal():
-                reshard_and_save_weights(args.model, args.presharded_checkpoints)
-        else:
-            # reshard checkpoints on every worker
+        logger.warning("Resharding master only. You must ensure that all ranks can read the resharded checkpoint files!")
+        if xm.is_master_ordinal():
             reshard_and_save_weights(args.model, args.presharded_checkpoints)
 
     # model
