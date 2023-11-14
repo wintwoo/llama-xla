@@ -1,8 +1,12 @@
 from itertools import chain
-from . import samsum
+from . import (
+    samsum,
+    wikitext,
+)
 
 DATASET_PREPROC = {
     "samsum": samsum.preprocess,
+    "wikitext": wikitext.preprocess,
 }
 
 def get_preprocessed_dataset(preproc_routine):
