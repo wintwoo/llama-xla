@@ -140,7 +140,7 @@ def main(index):
                         Thread(target=trace).start()
 
     # save and consolidate checkpoints
-    model_utils.save_model(model, optimizer, output_dir)
+    model_utils.save_model(model, optimizer, args.output_dir)
 
 
 if __name__ == "__main__":
