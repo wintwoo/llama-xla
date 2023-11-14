@@ -39,7 +39,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=str)
 parser.add_argument("--presharded_checkpoints", type=str)
 parser.add_argument("--num_cores", type=int)
-parser.add_argument("--dataset", type=str)
+parser.add_argument("--dataset_name", type=str, required=True)
+parser.add_argument("--dataset_config_name", type=str)
 parser.add_argument("--output_dir", type=str, required=True)
 parser.add_argument("--tokenizer", type=str, required=True)
 parser.add_argument("--batch_size", type=int, default=8)
@@ -73,7 +74,8 @@ def main(index):
 
     # training dataset
     dataset = dataset_utils.load_and_process_dataset(
-        dataset_name=args.dataset,
+        dataset_name=args.dataset_name,
+        dataset_config_name=args.dataset_config_name,
         tokenizer=tokenizer,
         detect_columns_from_split=args.train_split,
         block_size=args.block_size,
