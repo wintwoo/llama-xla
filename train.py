@@ -1,12 +1,8 @@
 import argparse
 import logging
 from math import ceil
-import os
-from preprocessing import utils as preproc_utils
-from utils.weights import reshard_and_save_weights
 
 import tempfile
-import torch
 import torch_xla.core.xla_model as xm
 import torch_xla.distributed.xla_multiprocessing as xmp
 import torch_xla.experimental.pjrt_backend
