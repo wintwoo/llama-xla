@@ -31,10 +31,6 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-os.environ["PJRT_DEVICE"] = "TPU"
-os.environ["XLA_USE_BF16"] = "1"
-# os.environ["PT_XLA_DEBUG"] = "1"
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=str)
 parser.add_argument("--presharded_checkpoints", type=str)
