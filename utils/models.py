@@ -38,6 +38,7 @@ def save_model(model: LlamaXlaFsdpForCausalLM, optimizer: Optimizer, output_dir:
     logging.info(f"checkpoint saved to {ckpt_path}")
 
     if xm.is_master_ordinal(local=False):
+        from torch_xla.distributed.fsdp import consolidate_sharded_model_checkpoints
         consolidate_sharded_model_checkpoints(
             ckpt_prefix=os.path.join(output_dir, "final_ckpt"),
             ckpt_suffix="_rank-*-of-*.pth",
