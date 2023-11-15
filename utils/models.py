@@ -14,11 +14,17 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def load_model(config_file_path: str, presharded_checkpoints: str=None):
+def load_model(
+        config_file_path: str,
+        presharded_checkpoints: str=None,
+        use_grad_checkpoint: bool=False,
+):
     logger.info("Loading model")
     config = LlamaConfig.from_pretrained(config_file_path)
     model = get_wrapped_llama_from_config(
-        config, presharded_checkpoints=presharded_checkpoints
+        config=config,
+        use_grad_checkpoint=use_grad_checkpoint,
+        presharded_checkpoints=presharded_checkpoints,
     )
     model.train()
     return model

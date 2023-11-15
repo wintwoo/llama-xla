@@ -40,6 +40,7 @@ parser.add_argument("--train_split", type=str, default="train")
 parser.add_argument("--train_steps", type=int, default=1000)
 parser.add_argument("--block_size", type=int, default=1024)
 parser.add_argument("--enable_profiling", action="store_true", default=False)
+parser.add_argument("--enable_gradient_checkpointing", action="store_true", default=False)
 parser.add_argument("--profile_steps", type=int, default=100)
 parser.add_argument("--num_epochs", type=int, default=3)
 parser.add_argument("--report_steps", type=int)
@@ -79,13 +80,19 @@ def main(index):
     data_loader = pl.MpDeviceLoader(data_loader, dev)
 
     # model
-    model = model_utils.load_model(args.config, args.presharded_checkpoints)
+    model = model_utils.load_model(
+        config_file_path=args.config,
+        presharded_checkpoints=args.presharded_checkpoints,
+        use_grad_checkpoint=args.enable_gradient_checkpointing,
+    )
 
     # optimizer
     optimizer = AdamW(model.parameters(), lr=1e-5)
     num_training_steps = args.num_epochs * ceil(
         len(dataset[args.train_split]) / args.batch_size
     )
+
+    # learning rate scheduler
     lr_scheduler = get_scheduler(
         name="linear",
         optimizer=optimizer,
@@ -101,7 +108,8 @@ def main(index):
 
     # training loop
     tracker = xm.RateTracker()
-    xm.master_print(model)
+    global_step = 0
+    
     for epoch in range(0, args.num_epochs):
         with tqdm(data_loader) as tepoch:
             for step, batch in enumerate(tepoch):
@@ -134,12 +142,14 @@ def main(index):
                         )
                         Thread(target=trace).start()
 
-                if args.save_steps and step % args.save_steps == 0:
+                global_step += 1
+
+                if args.save_steps and global_step % args.save_steps == 0:
                     model_utils.checkpoint_model(
                         model=model,
                         optimizer=optimizer,
                         output_dir=args.output_dir,
-                        ckpt_name=f"ckpt_step_{(epoch*step)+step}",
+                        ckpt_name=f"ckpt_step_{step}",
                     )
             
             if args.save_steps is None:
