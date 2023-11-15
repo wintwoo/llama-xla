@@ -6,7 +6,7 @@ tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_ut
 
 def preprocess(examples, tokenizer):
     with CaptureLogger(tok_logger) as cl:
-        output = tokenizer(examples)
+        output = tokenizer(examples["text"])
         # clm input could be much much longer than block_size
         if "Token indices sequence length is longer than the" in cl.out:
             tok_logger.warning(
