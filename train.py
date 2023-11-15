@@ -134,7 +134,7 @@ def main(index):
                         )
                         Thread(target=trace).start()
 
-                if args.save_steps and args.save_steps % step == 0:
+                if args.save_steps and step % args.save_steps == 0:
                     model_utils.checkpoint_model(
                         model=model,
                         optimizer=optimizer,
