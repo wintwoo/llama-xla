@@ -23,23 +23,33 @@ def load_model(config_file_path: str, presharded_checkpoints: str=None):
     model.train()
     return model
 
-def save_model(model: LlamaXlaFsdpForCausalLM, optimizer: Optimizer, output_dir: str):
-    ckpt_path = os.path.join(
-        output_dir,
-        f"final_ckpt_rank-{xm.get_ordinal():08d}-of-{xm.xrt_world_size():08d}.pth"
+def checkpoint_model(
+        model: LlamaXlaFsdpForCausalLM,
+        optimizer: Optimizer,
+        output_dir: str,
+        ckpt_name: str,
+):
+    ckpt_dir = os.path.join(output_dir, ckpt_name)
+    ckpt_file_path = os.path.join(
+        ckpt_dir,
+        f"ckpt_rank-{xm.get_ordinal():08d}-of-{xm.xrt_world_size():08d}.pth"
     )
     ckpt = {
         'model': model.state_dict(),
         'shard_metadata': model.get_shard_metadata(),
         'optimizer': optimizer.state_dict(),  # not needed in ckpt consolidation
     }
-    os.makedirs(output_dir, exist_ok=True)
-    xm.save(ckpt, ckpt_path, master_only=False)
-    logging.info(f"checkpoint saved to {ckpt_path}")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    xm.save(ckpt, ckpt_file_path, master_only=False)
+    logging.info(f"Checkpoint saved to {ckpt_dir}")
 
+def save_model(model: LlamaXlaFsdpForCausalLM, optimizer: Optimizer, output_dir: str):
+    checkpoint_model(model, optimizer, output_dir, "consolidated_model")
     if xm.is_master_ordinal(local=False):
         from torch_xla.distributed.fsdp import consolidate_sharded_model_checkpoints
+        model_dir = os.path.join(output_dir, "consolidated_model")
         consolidate_sharded_model_checkpoints(
-            ckpt_prefix=os.path.join(output_dir, "final_ckpt"),
+            ckpt_prefix=os.path.join(model_dir, "ckpt_rank"),
             ckpt_suffix="_rank-*-of-*.pth",
         )
+        logging.info(f"Consolidated model saved to {model_dir}")

@@ -44,6 +44,7 @@ parser.add_argument("--profile_steps", type=int, default=100)
 parser.add_argument("--num_epochs", type=int, default=3)
 parser.add_argument("--report_steps", type=int)
 parser.add_argument("--logging_steps", type=int)
+parser.add_argument("--save_steps", type=int)
 args = parser.parse_args()
 
 
@@ -127,11 +128,27 @@ def main(index):
 
                 if args.enable_profiling:
                     if step % args.profile_steps == 0 and xm.is_master_ordinal():
-                        logger.info("start profiling")
+                        logger.info("Start profiling")
                         trace = lambda: xp.trace(
                             "127.0.0.1:9012", tempfile.mkdtemp(), 20000
                         )
                         Thread(target=trace).start()
+
+                if args.save_steps and args.save_steps % step == 0:
+                    model_utils.checkpoint_model(
+                        model=model,
+                        optimizer=optimizer,
+                        output_dir=args.output_dir,
+                        ckpt_name=f"ckpt_step_{(epoch*step)+step}",
+                    )
+            
+            if args.save_steps is None:
+                model_utils.checkpoint_model(
+                    model=model,
+                    optimizer=optimizer,
+                    output_dir=args.output_dir,
+                    ckpt_name=f"ckpt_epoch_{epoch+1}",
+                )
 
     # save and consolidate checkpoints
     model_utils.save_model(model, optimizer, args.output_dir)
