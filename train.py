@@ -46,6 +46,7 @@ parser.add_argument("--num_epochs", type=int, default=3)
 parser.add_argument("--report_steps", type=int)
 parser.add_argument("--logging_steps", type=int)
 parser.add_argument("--save_steps", type=int)
+parser.add_argument("--max_steps", type=int)
 args = parser.parse_args()
 
 
@@ -151,6 +152,9 @@ def main(index):
                         output_dir=args.output_dir,
                         ckpt_name=f"ckpt_step_{step}",
                     )
+                
+                if global_step == args.max_steps:
+                    logging.info("Stop training due to max_steps reached")
             
             if args.save_steps is None:
                 model_utils.checkpoint_model(
@@ -161,6 +165,7 @@ def main(index):
                 )
 
     # save and consolidate checkpoints
+    logging.info("Saving consolidated model")
     model_utils.save_model(model, optimizer, args.output_dir)
 
 
