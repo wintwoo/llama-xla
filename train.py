@@ -155,6 +155,7 @@ def main(index):
                 
                 if global_step == args.max_steps:
                     logging.info("Stop training due to max_steps reached")
+                    break
             
             if args.save_steps is None:
                 model_utils.checkpoint_model(
