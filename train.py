@@ -3,7 +3,6 @@ import logging
 from math import ceil
 
 import tempfile
-from torch.distributed import barrier
 import torch_xla.core.xla_model as xm
 import torch_xla.distributed.xla_multiprocessing as xmp
 import torch_xla.experimental.pjrt_backend
@@ -173,7 +172,7 @@ def main(index):
 
     # save and consolidate checkpoints
     logger.info("Waiting for all ranks")
-    barrier()
+    xm.rendezvous()
     model_utils.save_model(model, optimizer, args.output_dir)
 
 
