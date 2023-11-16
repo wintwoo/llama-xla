@@ -51,6 +51,8 @@ def checkpoint_model(
 
 def save_model(model: LlamaXlaFsdpForCausalLM, optimizer: Optimizer, output_dir: str):
     checkpoint_model(model, optimizer, output_dir, "consolidated_model")
+    logger.info("Waiting for all ranks")
+    xm.rendezvous("consolidate_model")
     if xm.is_master_ordinal(local=False):
         logger.info("Saving consolidated model")
         from torch_xla.distributed.fsdp import consolidate_sharded_model_checkpoints
@@ -59,4 +61,4 @@ def save_model(model: LlamaXlaFsdpForCausalLM, optimizer: Optimizer, output_dir:
             ckpt_prefix=os.path.join(model_dir, "ckpt_rank"),
             ckpt_suffix="-*-of-*.pth",
         )
-        logging.info(f"Consolidated model saved to {model_dir}")
+        logger.info(f"Consolidated model saved to {model_dir}")
