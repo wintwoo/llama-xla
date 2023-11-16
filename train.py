@@ -145,24 +145,29 @@ def main(index):
 
                 global_step += 1
 
-                if args.save_steps and global_step % args.save_steps == 0:
+                if (args.save_steps and global_step % args.save_steps) or \
+                    global_step == args.max_steps:
+                    ckpt_name = f"ckpt_step_{global_step}"
+                    logger.info(f"Saving checkpoint to ckpt_step_{ckpt_name}")
                     model_utils.checkpoint_model(
                         model=model,
                         optimizer=optimizer,
                         output_dir=args.output_dir,
-                        ckpt_name=f"ckpt_step_{step}",
+                        ckpt_name=ckpt_name,
                     )
                 
                 if global_step == args.max_steps:
-                    logger.info("Stop training due to max_steps reached")
+                    logger.info("Stopping training due to max_steps reached")
                     break
-            
+
             if args.save_steps is None:
+                ckpt_name = f"ckpt_epoch_{epoch+1}"
+                logger.info(f"Saving checkpoint to {ckpt_name}")
                 model_utils.checkpoint_model(
                     model=model,
                     optimizer=optimizer,
                     output_dir=args.output_dir,
-                    ckpt_name=f"ckpt_epoch_{epoch+1}",
+                    ckpt_name=ckpt_name,
                 )
 
     # save and consolidate checkpoints
