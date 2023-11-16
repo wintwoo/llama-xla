@@ -154,7 +154,7 @@ def main(index):
                     )
                 
                 if global_step == args.max_steps:
-                    logging.info("Stop training due to max_steps reached")
+                    logger.info("Stop training due to max_steps reached")
                     break
             
             if args.save_steps is None:
@@ -166,7 +166,7 @@ def main(index):
                 )
 
     # save and consolidate checkpoints
-    logging.info("Saving consolidated model")
+    logger.info("Saving consolidated model")
     model_utils.save_model(model, optimizer, args.output_dir)
 
 

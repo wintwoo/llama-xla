@@ -56,6 +56,6 @@ def save_model(model: LlamaXlaFsdpForCausalLM, optimizer: Optimizer, output_dir:
         model_dir = os.path.join(output_dir, "consolidated_model")
         consolidate_sharded_model_checkpoints(
             ckpt_prefix=os.path.join(model_dir, "ckpt_rank"),
-            ckpt_suffix="_rank-*-of-*.pth",
+            ckpt_suffix="-*-of-*.pth",
         )
         logging.info(f"Consolidated model saved to {model_dir}")
