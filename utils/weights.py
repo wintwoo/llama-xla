@@ -53,7 +53,7 @@ def reshard_and_save_weights(model_dir: str, output_dir: str):
                     grouped_weights[block_name][match.group(2)] = ckpt[weight]
         
         for layer in grouped_weights.keys():
-            logger.info(f"saving weights for layer {layer}")
+            logger.info(f"Saving weights for layer {layer}")
             torch.save(grouped_weights[layer], os.path.join(output_dir, f"{layer}.bin"))
 
 def main():

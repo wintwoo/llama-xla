@@ -3,6 +3,7 @@ import logging
 from math import ceil
 
 import tempfile
+from torch import dist
 import torch_xla.core.xla_model as xm
 import torch_xla.distributed.xla_multiprocessing as xmp
 import torch_xla.experimental.pjrt_backend
@@ -148,7 +149,7 @@ def main(index):
                 if (args.save_steps and global_step % args.save_steps) or \
                     global_step == args.max_steps:
                     ckpt_name = f"ckpt_step_{global_step}"
-                    logger.info(f"Saving checkpoint to ckpt_step_{ckpt_name}")
+                    logger.info(f"Saving checkpoint {ckpt_name}")
                     model_utils.checkpoint_model(
                         model=model,
                         optimizer=optimizer,
@@ -162,7 +163,7 @@ def main(index):
 
             if args.save_steps is None:
                 ckpt_name = f"ckpt_epoch_{epoch+1}"
-                logger.info(f"Saving checkpoint to {ckpt_name}")
+                logger.info(f"Saving checkpoint {ckpt_name}")
                 model_utils.checkpoint_model(
                     model=model,
                     optimizer=optimizer,
@@ -171,7 +172,7 @@ def main(index):
                 )
 
     # save and consolidate checkpoints
-    logger.info("Saving consolidated model")
+    dist.barrier()
     model_utils.save_model(model, optimizer, args.output_dir)
 
 
