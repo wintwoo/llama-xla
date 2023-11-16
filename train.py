@@ -172,7 +172,7 @@ def main(index):
 
     # save and consolidate checkpoints
     logger.info("Waiting for all ranks")
-    xm.rendezvous()
+    xm.rendezvous("consolidate_model")
     model_utils.save_model(model, optimizer, args.output_dir)
 
 
