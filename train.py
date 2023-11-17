@@ -165,8 +165,7 @@ def main(index):
 
                 global_step += 1
 
-                if (args.save_steps and global_step % args.save_steps) or \
-                    global_step == args.max_steps:
+                if args.save_steps and global_step % args.save_steps:
                     ckpt_name = f"ckpt_step_{global_step}"
                     logger.info(f"Saving checkpoint {ckpt_name}")
                     model_utils.checkpoint_model(
