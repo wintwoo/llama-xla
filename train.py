@@ -195,7 +195,7 @@ def main(index):
         model=model,
         optimizer=optimizer,
         output_dir=args.output_dir,
-        consolidate_checkpoint_=args.enable_checkpoint_consolidation,
+        consolidate_checkpoint=args.enable_checkpoint_consolidation,
     )
 
 
