@@ -83,8 +83,8 @@ def main(index):
     data_loader = DataLoader(dataset[args.train_split], batch_size=args.batch_size)
     data_loader = pl.MpDeviceLoader(data_loader, dev)
 
-    if args.model:
-        if not args.resharded_checkpoints_dir:
+    if args.huggingface_model_dir:
+        if not args.resharded_checkpoint_dir:
             raise ValueError("--resharded_checkpoint_dir must be set if --huggingface_model_dir is set!")
         logger.info("Resharding model checkpoint to allow FSDP wrapping per-layer")
         logger.info("Please ensure that --resharded_checkpoint_dir is readable from ALL workers for this to work!")
