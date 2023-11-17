@@ -21,6 +21,7 @@ from threading import Thread
 from utils import (
     datasets as dataset_utils,
     models as model_utils,
+    weights as weight_utils,
 )
 
 logging.basicConfig()
@@ -29,7 +30,8 @@ logger.setLevel(logging.DEBUG)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=str)
-parser.add_argument("--presharded_checkpoints", type=str)
+parser.add_argument("--resharded_checkpoint_dir", type=str)
+parser.add_argument("--huggingface_model_dir", type=str)
 parser.add_argument("--num_cores", type=int)
 parser.add_argument("--dataset_name", type=str, required=True)
 parser.add_argument("--dataset_config_name", type=str)
@@ -47,6 +49,7 @@ parser.add_argument("--report_steps", type=int)
 parser.add_argument("--logging_steps", type=int)
 parser.add_argument("--save_steps", type=int)
 parser.add_argument("--max_steps", type=int)
+parser.add_argument("--enable_checkpoint_consolidation", action="store_true", default=False)
 args = parser.parse_args()
 
 
@@ -80,10 +83,17 @@ def main(index):
     data_loader = DataLoader(dataset[args.train_split], batch_size=args.batch_size)
     data_loader = pl.MpDeviceLoader(data_loader, dev)
 
+    if args.model:
+        if not args.resharded_checkpoints_dir:
+            raise ValueError("--resharded_checkpoint_dir must be set if --huggingface_model_dir is set!")
+        logger.info("Resharding model checkpoint to allow FSDP wrapping per-layer")
+        logger.info("Please ensure that --resharded_checkpoint_dir is readable from ALL workers for this to work!")
+        weight_utils.reshard_and_save_weights(args.huggingface_model_dir, args.resharded_checkpoint_dir)
+
     # model
     model = model_utils.load_model(
         config_file_path=args.config,
-        presharded_checkpoints=args.presharded_checkpoints,
+        resharded_checkpoint_dir=args.resharded_checkpoint_dir,
         use_grad_checkpoint=args.enable_gradient_checkpointing,
     )
 
@@ -110,7 +120,6 @@ def main(index):
     # training loop
     tracker = xm.RateTracker()
     global_step = 0
-    
     for epoch in range(0, args.num_epochs):
         with tqdm(data_loader) as tepoch:
             for step, batch in enumerate(tepoch):
@@ -160,7 +169,7 @@ def main(index):
                     logger.info("Stopping training due to max_steps reached")
                     break
 
-            if args.save_steps is None:
+            if args.save_steps is None and args.max_steps is None:
                 ckpt_name = f"ckpt_epoch_{epoch+1}"
                 logger.info(f"Saving checkpoint {ckpt_name}")
                 model_utils.checkpoint_model(
@@ -171,7 +180,12 @@ def main(index):
                 )
 
     # save and consolidate checkpoints
-    model_utils.save_model(model, optimizer, args.output_dir)
+    model_utils.save_model(
+        model=model,
+        optimizer=optimizer,
+        output_dir=args.output_dir,
+        consolidate_checkpoint_=args.enable_checkpoint_consolidation,
+    )
 
 
 if __name__ == "__main__":

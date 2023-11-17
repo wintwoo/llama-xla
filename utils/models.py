@@ -16,7 +16,7 @@ logger.setLevel(logging.INFO)
 
 def load_model(
         config_file_path: str,
-        presharded_checkpoints: str=None,
+        resharded_checkpoint_dir: str=None,
         use_grad_checkpoint: bool=False,
 ):
     logger.info("Loading model")
@@ -24,7 +24,7 @@ def load_model(
     model = get_wrapped_llama_from_config(
         config=config,
         use_grad_checkpoint=use_grad_checkpoint,
-        presharded_checkpoints=presharded_checkpoints,
+        resharded_checkpoint_dir=resharded_checkpoint_dir,
     )
     model.train()
     return model
@@ -49,16 +49,22 @@ def checkpoint_model(
     xm.save(ckpt, ckpt_file_path, master_only=False)
     logger.info(f"Checkpoint saved to {ckpt_dir}")
 
-def save_model(model: LlamaXlaFsdpForCausalLM, optimizer: Optimizer, output_dir: str):
+def save_model(
+        model: LlamaXlaFsdpForCausalLM,
+        optimizer: Optimizer,
+        output_dir: str,
+        consolidate_checkpoint: bool = False,
+):
     checkpoint_model(model, optimizer, output_dir, "consolidated_model")
-    logger.info("Waiting for all ranks")
-    xm.rendezvous("consolidate_model")
-    if xm.is_master_ordinal(local=False):
-        logger.info("Saving consolidated model")
-        from torch_xla.distributed.fsdp import consolidate_sharded_model_checkpoints
-        model_dir = os.path.join(output_dir, "consolidated_model")
-        consolidate_sharded_model_checkpoints(
-            ckpt_prefix=os.path.join(model_dir, "ckpt_rank"),
-            ckpt_suffix="-*-of-*.pth",
-        )
-        logger.info(f"Consolidated model saved to {model_dir}")
+    if consolidate_checkpoint:
+        logger.info("Waiting for all ranks")
+        xm.rendezvous("consolidate_model")
+        if xm.is_master_ordinal(local=False):
+            logger.info("Saving consolidated model")
+            from torch_xla.distributed.fsdp import consolidate_sharded_model_checkpoints
+            model_dir = os.path.join(output_dir, "consolidated_model")
+            consolidate_sharded_model_checkpoints(
+                ckpt_prefix=os.path.join(model_dir, "ckpt_rank"),
+                ckpt_suffix="-*-of-*.pth",
+            )
+            logger.info(f"Consolidated model saved to {model_dir}")
