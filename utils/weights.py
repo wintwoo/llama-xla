@@ -29,20 +29,21 @@ def reshard_and_save_weights(model_dir: str, output_dir: str):
         index = json.load(f)
 
     ckpt_files = set([index["weight_map"][k] for k in index["weight_map"].keys()])
-    print(f"Found these checkpoint files in pytorch_model_bin.index.json: {ckpt_files}")
+    logger.info(f"Found these checkpoint files in pytorch_model_bin.index.json: {ckpt_files}")
 
     grouped_weights = {}
     p = re.compile(DECODER_LAYER_REGEX)
-
+    os.makedirs(output_dir, exist_ok=True)
+    
     for f in ckpt_files:
-        logger.info(f"processing {f}")
+        logger.info(f"Processing {f}")
         ckpt = torch.load(os.path.join(model_dir, f))
         for weight in ckpt.keys():
             if weight in EXACT_MATCH_WEIGHTS:
-                logger.info(f"saving weights to {weight}")
                 weight_dict = {
                     weight: ckpt[weight]
                 }
+                logger.info(f"Saving weights for {weight}")
                 torch.save(weight_dict, os.path.join(output_dir, f"{weight}.bin"))
             else:
                 match = p.search(weight)
