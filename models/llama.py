@@ -57,17 +57,26 @@ class LlamaXlaFsdpModel(LlamaModel):
         else:
             logger.debug("Using token embeddings from checkpoint")
             ckpt = torch.load(os.path.join(resharded_checkpoint_dir, "model.embed_tokens.weight.bin"))
-            self.embed_tokens = nn.Embedding.from_pretrained(ckpt["model.embed_tokens.weight"].type(torch.float32))
+            self.embed_tokens = nn.Embedding.from_pretrained(
+                embeddings=ckpt["model.embed_tokens.weight"].type(torch.float32),
+                padding_idx=self.padding_idx)
 
         blocks = []
+        # for i in range(config.num_hidden_layers):
+        #     block = LlamaDecoderLayer(config)
+        #     if resharded_checkpoint_dir is None:
+        #         block.apply(self._init_weights) 
+        #     else:
+        #         logger.debug(f"Using checkpoint weights for decoder block {i}")
+        #         block = _set_block_weights_from_checkpoint(block, i, resharded_checkpoint_dir)
+                
+        #     block = _xla_fsdp_wrap(block, use_grad_checkpoint=True)
+        #     blocks.append(block)
+
+        # Debug - skip loading checkpoints for decoder layers
         for i in range(config.num_hidden_layers):
             block = LlamaDecoderLayer(config)
-            if resharded_checkpoint_dir is None:
-                block.apply(self._init_weights) 
-            else:
-                logger.debug(f"Using checkpoint weights for decoder block {i}")
-                block = _set_block_weights_from_checkpoint(block, i, resharded_checkpoint_dir)
-                
+            block.apply(self._init_weights) 
             block = _xla_fsdp_wrap(block, use_grad_checkpoint=True)
             blocks.append(block)
 

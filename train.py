@@ -100,6 +100,9 @@ def main(index):
         use_grad_checkpoint=args.enable_gradient_checkpointing,
     )
 
+    if xm.is_master_ordinal(local=False):
+        logging.debug(model)
+
     # optimizer
     optimizer = AdamW(model.parameters(), lr=1e-5)
     num_training_steps = args.num_epochs * ceil(
