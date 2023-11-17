@@ -83,12 +83,15 @@ def main(index):
     data_loader = DataLoader(dataset[args.train_split], batch_size=args.batch_size)
     data_loader = pl.MpDeviceLoader(data_loader, dev)
 
+    # reshard model for checkpoint loading by layer
     if args.huggingface_model_dir:
         if not args.resharded_checkpoint_dir:
             raise ValueError("--resharded_checkpoint_dir must be set if --huggingface_model_dir is set!")
-        logger.info("Resharding model checkpoint to allow FSDP wrapping per-layer")
-        logger.info("Please ensure that --resharded_checkpoint_dir is readable from ALL workers for this to work!")
-        weight_utils.reshard_and_save_weights(args.huggingface_model_dir, args.resharded_checkpoint_dir)
+        if xm.is_master_ordinal(local=False):
+            logger.info("Resharding model checkpoint to allow FSDP wrapping per-layer")
+            logger.info("Please ensure that --resharded_checkpoint_dir is readable from ALL workers for this to work!")
+            weight_utils.reshard_and_save_weights(args.huggingface_model_dir, args.resharded_checkpoint_dir)
+        xm.rendezvous("reshard_model")
 
     # model
     model = model_utils.load_model(
