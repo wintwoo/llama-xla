@@ -50,6 +50,7 @@ parser.add_argument("--logging_steps", type=int)
 parser.add_argument("--save_steps", type=int)
 parser.add_argument("--max_steps", type=int)
 parser.add_argument("--enable_checkpoint_consolidation", action="store_true", default=False)
+parser.add_argument("--reshard_checkpoint_on_master_only", action="store_true", default=False)
 args = parser.parse_args()
 
 
@@ -87,11 +88,15 @@ def main(index):
     if args.huggingface_model_dir:
         if not args.resharded_checkpoint_dir:
             raise ValueError("--resharded_checkpoint_dir must be set if --huggingface_model_dir is set!")
-        if xm.is_master_ordinal(local=False):
-            logger.info("Resharding model checkpoint to allow FSDP wrapping per-layer")
-            logger.info("Please ensure that --resharded_checkpoint_dir is readable from ALL workers for this to work!")
+        if args.reshard_checkpoint_on_master_only:
+            if xm.is_master_ordinal(local=False):
+                logger.info("Resharding model checkpoint to allow FSDP wrapping per-layer on master ONLY")
+                logger.info("Please ensure that --resharded_checkpoint_dir is readable from ALL workers for this to work!")
+                weight_utils.reshard_and_save_weights(args.huggingface_model_dir, args.resharded_checkpoint_dir)
+            xm.rendezvous("reshard_model")
+        else:
+            logging.info("Resharding model checkpoint to allow FSDP wrapping per-layer")
             weight_utils.reshard_and_save_weights(args.huggingface_model_dir, args.resharded_checkpoint_dir)
-        xm.rendezvous("reshard_model")
 
     # model
     model = model_utils.load_model(
