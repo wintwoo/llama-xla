@@ -101,7 +101,7 @@ def main(index):
     )
 
     if xm.is_master_ordinal(local=False):
-        logging.debug(model)
+        logger.debug(model)
 
     # optimizer
     optimizer = AdamW(model.parameters(), lr=1e-5)

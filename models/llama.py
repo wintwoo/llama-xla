@@ -62,23 +62,23 @@ class LlamaXlaFsdpModel(LlamaModel):
                 padding_idx=self.padding_idx)
 
         blocks = []
-        # for i in range(config.num_hidden_layers):
-        #     block = LlamaDecoderLayer(config)
-        #     if resharded_checkpoint_dir is None:
-        #         block.apply(self._init_weights) 
-        #     else:
-        #         logger.debug(f"Using checkpoint weights for decoder block {i}")
-        #         block = _set_block_weights_from_checkpoint(block, i, resharded_checkpoint_dir)
-                
-        #     block = _xla_fsdp_wrap(block, use_grad_checkpoint=True)
-        #     blocks.append(block)
-
-        # Debug - skip loading checkpoints for decoder layers
         for i in range(config.num_hidden_layers):
             block = LlamaDecoderLayer(config)
-            block.apply(self._init_weights) 
+            if resharded_checkpoint_dir is None:
+                block.apply(self._init_weights) 
+            else:
+                logger.debug(f"Using checkpoint weights for decoder block {i}")
+                block = _set_block_weights_from_checkpoint(block, i, resharded_checkpoint_dir)
+                
             block = _xla_fsdp_wrap(block, use_grad_checkpoint=True)
             blocks.append(block)
+
+        # Debug - skip loading checkpoints for decoder layers
+        # for i in range(config.num_hidden_layers):
+        #     block = LlamaDecoderLayer(config)
+        #     block.apply(self._init_weights) 
+        #     block = _xla_fsdp_wrap(block, use_grad_checkpoint=True)
+        #     blocks.append(block)
 
         self.layers = nn.ModuleList(blocks)
 
