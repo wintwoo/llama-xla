@@ -51,11 +51,10 @@ def checkpoint_model(
 
 def save_model(
         model: LlamaXlaFsdpForCausalLM,
-        optimizer: Optimizer,
         output_dir: str,
         consolidate_checkpoint: bool = False,
 ):
-    checkpoint_model(model, optimizer, output_dir, "consolidated_model")
+    checkpoint_model(model, None, output_dir, "consolidated_model")
     if consolidate_checkpoint:
         logger.info("Waiting for all ranks")
         xm.rendezvous("consolidate_model")
