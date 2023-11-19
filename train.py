@@ -192,7 +192,6 @@ def main(index):
     # save and consolidate checkpoints
     model_utils.save_model(
         model=model,
-        optimizer=optimizer,
         output_dir=args.output_dir,
         consolidate_checkpoint=args.enable_checkpoint_consolidation,
     )
