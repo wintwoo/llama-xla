@@ -53,7 +53,7 @@ parser.add_argument("--learning_rate", type=float, default=1e-4)
 parser.add_argument("--enable_checkpoint_consolidation", action="store_true", default=False)
 parser.add_argument("--reshard_checkpoint_on_master_only", action="store_true", default=False)
 parser.add_argument("--learning_rate_scheduler", type=str, default="linear")
-parser.add_argument("--num_warmup_steps", type=int, required=False)
+parser.add_argument("--num_warmup_steps", type=int, default=0)
 
 args = parser.parse_args()
 
