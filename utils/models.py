@@ -61,7 +61,7 @@ def save_model(
         if xm.is_master_ordinal(local=False):
             logger.info("Saving consolidated model")
             from torch_xla.distributed.fsdp import consolidate_sharded_model_checkpoints
-            model_dir = os.path.join(output_dir, "consolidated_model")
+            model_dir = os.path.join(output_dir, "final_model")
             os.makedirs(model_dir, exist_ok=True)
             consolidate_sharded_model_checkpoints(
                 ckpt_prefix=os.path.join(model_dir, "ckpt_rank"),
