@@ -43,7 +43,7 @@ def checkpoint_model(
     ckpt = {
         'model': model.state_dict(),
         'shard_metadata': model.get_shard_metadata(),
-        'optimizer': optimizer.state_dict(),  # not needed in ckpt consolidation
+        'optimizer': optimizer.state_dict() if optimizer is not None else None,  # not needed in ckpt consolidation
     }
     os.makedirs(ckpt_dir, exist_ok=True)
     xm.save(ckpt, ckpt_file_path, master_only=False)
