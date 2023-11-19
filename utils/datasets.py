@@ -1,6 +1,11 @@
 import datasets
+import logging
 from preprocessing import utils as preproc_utils
 import tempfile
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:%(module)s:%(funcName)s - %(message)s")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def load_and_process_dataset(

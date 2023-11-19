@@ -24,7 +24,7 @@ from utils import (
     weights as weight_utils,
 )
 
-logging.basicConfig()
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:%(module)s:%(funcName)s - %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -108,9 +108,7 @@ def main(index):
         resharded_checkpoint_dir=args.resharded_checkpoint_dir,
         use_grad_checkpoint=args.enable_gradient_checkpointing,
     )
-
-    if xm.is_master_ordinal(local=False):
-        logger.debug(model)
+    xm.master_print(model)
 
     # optimizer
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
@@ -171,7 +169,7 @@ def main(index):
 
                 if args.save_steps and global_step % args.save_steps:
                     ckpt_name = f"ckpt_step_{global_step}"
-                    logger.info(f"Saving checkpoint {ckpt_name}")
+                    xm.master_print(f"Saving checkpoint {ckpt_name}")
                     model_utils.checkpoint_model(
                         model=model,
                         optimizer=optimizer,
@@ -180,12 +178,12 @@ def main(index):
                     )
                 
                 if global_step == args.max_steps:
-                    logger.info("Stopping training due to max_steps reached")
+                    xm.master_print("Stopping training due to max_steps reached")
                     break
 
             if args.save_steps is None and args.max_steps is None:
                 ckpt_name = f"ckpt_epoch_{epoch+1}"
-                logger.info(f"Saving checkpoint {ckpt_name}")
+                xm.master_print(f"Saving checkpoint {ckpt_name}")
                 model_utils.checkpoint_model(
                     model=model,
                     optimizer=optimizer,

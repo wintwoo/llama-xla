@@ -5,9 +5,9 @@ import os
 import re
 import torch
 
-logging.basicConfig()
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:%(module)s:%(funcName)s - %(message)s")
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 EXACT_MATCH_WEIGHTS = [
     "lm_head.weight", 
@@ -16,6 +16,7 @@ EXACT_MATCH_WEIGHTS = [
 ]
 
 DECODER_LAYER_REGEX = r"(model\.layers\.[0-9]*)\.(.*)"
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
