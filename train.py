@@ -49,8 +49,12 @@ parser.add_argument("--report_steps", type=int)
 parser.add_argument("--logging_steps", type=int)
 parser.add_argument("--save_steps", type=int)
 parser.add_argument("--max_steps", type=int)
+parser.add_argument("--learning_rate", type=float, default=1e-4)
 parser.add_argument("--enable_checkpoint_consolidation", action="store_true", default=False)
 parser.add_argument("--reshard_checkpoint_on_master_only", action="store_true", default=False)
+parser.add_argument("--learning_rate_scheduler", type=str, default="linear")
+parser.add_argument("--num_warmup_steps", type=int)
+
 args = parser.parse_args()
 
 
@@ -109,16 +113,16 @@ def main(index):
         logger.debug(model)
 
     # optimizer
-    optimizer = AdamW(model.parameters(), lr=1e-5)
+    optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     num_training_steps = args.num_epochs * ceil(
         len(dataset[args.train_split]) / args.batch_size
     )
 
     # learning rate scheduler
     lr_scheduler = get_scheduler(
-        name="linear",
+        name=args.learning_rate_scheduler,
         optimizer=optimizer,
-        num_warmup_steps=0,
+        num_warmup_steps=args.num_warmup_steps,
         num_training_steps=num_training_steps,
     )
 
