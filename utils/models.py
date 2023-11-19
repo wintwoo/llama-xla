@@ -9,7 +9,6 @@ import torch_xla.core.xla_model as xm
 from torch_xla.amp.syncfree import AdamW
 from transformers import LlamaConfig
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:%(module)s:%(funcName)s - %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 

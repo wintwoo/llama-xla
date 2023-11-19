@@ -23,8 +23,6 @@ from utils import (
     models as model_utils,
     weights as weight_utils,
 )
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:%(module)s:%(funcName)s - %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
