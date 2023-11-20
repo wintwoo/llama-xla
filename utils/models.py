@@ -53,7 +53,11 @@ def save_model(
         output_dir: str,
         consolidate_checkpoint: bool = False,
 ):
+    # Save checkpoint without the optimizer states to reduce the file size
     checkpoint_model(model, None, output_dir, "save_model")
+
+    # Consolidate the FSDP checkpoint into a single model file containing the original
+    # (unwrapped) parameters
     if consolidate_checkpoint:
         logger.info("Waiting for all ranks")
         xm.rendezvous("save_model")
@@ -66,4 +70,12 @@ def save_model(
                 ckpt_prefix=os.path.join(model_dir, "ckpt_rank"),
                 ckpt_suffix="-*-of-*.pth",
             )
+            logger.warning("To use with HuggingFace transformers, you MUST re-key the saved model dict:\n\ne.g.\n\n"
+                           ">>> import torch\n"
+                           ">>> old_model = torch.load(\"pytorch_model-00001-of-00001.bin\")\n"
+                           ">>> new_model = {}\n"
+                           ">>> for k in old_model[\"model\"].keys():\n"
+                           ">>>     new_model[k] = old_model[\"model\"][k]\n"
+                           ">>> torch.save(new_model, \"new_model.bin\")\n\n"
+                           "Also update your model index file to point to your new re-keyed model checkpoint.")
             logger.info(f"Consolidated model saved to {model_dir}")
