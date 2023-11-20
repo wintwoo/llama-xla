@@ -71,10 +71,10 @@ def main(index):
 
     dev = xm.xla_device()
 
-    # tokenizer
+    # Setup tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
 
-    # training dataset
+    # Load and process training dataset
     dataset = dataset_utils.load_and_process_dataset(
         dataset_name=args.dataset_name,
         dataset_config_name=args.dataset_config_name,
@@ -83,7 +83,7 @@ def main(index):
         block_size=args.block_size,
     )
 
-    # training data sampler
+    # Setup training data sampler
     train_sampler = None
     if xm.xrt_world_size() > 1:
         train_sampler = DistributedSampler(
@@ -93,7 +93,7 @@ def main(index):
             shuffle=True,
         )
 
-    # training data loader
+    # Setup training data loader
     data_loader = DataLoader(
         dataset[args.train_split],
         batch_size=args.batch_size,
@@ -101,7 +101,7 @@ def main(index):
     )
     data_loader = pl.MpDeviceLoader(data_loader, dev)
 
-    # reshard model for checkpoint loading by layer
+    # Reshard model for checkpoint loading by layer
     if args.huggingface_model_dir:
         if not args.resharded_checkpoint_dir:
             raise ValueError("--resharded_checkpoint_dir must be set if --huggingface_model_dir is set!")
@@ -115,7 +115,7 @@ def main(index):
             logging.info("Resharding model checkpoint to allow FSDP wrapping per-layer")
             weight_utils.reshard_and_save_weights(args.huggingface_model_dir, args.resharded_checkpoint_dir)
 
-    # model
+    # Setup model
     model = model_utils.load_model(
         config_file_path=args.config,
         resharded_checkpoint_dir=args.resharded_checkpoint_dir,
@@ -123,13 +123,13 @@ def main(index):
     )
     xm.master_print(model)
 
-    # optimizer
+    # Setup optimizer
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     num_training_steps = args.num_epochs * ceil(
         len(dataset[args.train_split]) / args.batch_size
     )
 
-    # learning rate scheduler
+    # Setup learning rate scheduler
     lr_scheduler = get_scheduler(
         name=args.learning_rate_scheduler,
         optimizer=optimizer,
@@ -143,7 +143,7 @@ def main(index):
             f"Step: {step}, Loss: {loss_value}, Rate: {tracker.rate()}, Global Rate: {tracker.global_rate()}"
         )
 
-    # training loop
+    # Run training loop
     tracker = xm.RateTracker()
     global_step = 0
     for epoch in range(0, args.num_epochs):
@@ -151,19 +151,25 @@ def main(index):
             for step, batch in enumerate(tepoch):
                 tepoch.set_description(f"Epoch {epoch+1}")
                 optimizer.zero_grad()
+
+                # Model forward pass
                 outputs = model(**batch)
+
+                # Model backwards pass
                 loss = outputs.loss
                 loss.backward()
                 optimizer.step()  # do not reduce gradients on sharded params
                 lr_scheduler.step()
                 tracker.add(args.batch_size)
 
+                # Print training loss
                 if args.logging_steps is not None and (
                     step % args.logging_steps == 0
                     or num_training_steps == step * (epoch + 1)
                 ):
                     xm.add_step_closure(print_info, (step, loss, tracker))
 
+                # Print XLA metrics
                 if args.report_steps is not None and (
                     step % args.report_steps == 0
                     or num_training_steps == step * (epoch + 1)
@@ -180,6 +186,7 @@ def main(index):
 
                 global_step += 1
 
+                # If save_steps is set, save a checkpoint for every save_steps.
                 if args.save_steps and global_step % args.save_steps:
                     ckpt_name = f"ckpt_step_{global_step}"
                     logger.info(f"Saving checkpoint {ckpt_name}")
@@ -204,7 +211,7 @@ def main(index):
                     ckpt_name=ckpt_name,
                 )
 
-    # save and consolidate checkpoints
+    # Save final model and optionally consolidate checkpoints
     model_utils.save_model(
         model=model,
         output_dir=args.output_dir,

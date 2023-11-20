@@ -32,14 +32,14 @@ def _xla_fsdp_wrap(module, use_grad_checkpoint=True):
 def _set_block_weights_from_checkpoint(module, block_num, resharded_checkpoint_dir):
     with torch.no_grad():
         ckpt = torch.load(os.path.join(resharded_checkpoint_dir, f"model.layers.{block_num}.bin"))
-        # this is a module buffer, not a param
+        # This is a module buffer, not a param
         module.self_attn.rotary_emb.inv_freq = ckpt.pop("self_attn.rotary_emb.inv_freq").type(torch.float32)
         module.load_state_dict(ckpt)
     return module
 
 def get_wrapped_llama_from_config(config, resharded_checkpoint_dir: str=None, use_grad_checkpoint=True):
     model = LlamaXlaFsdpForCausalLM(config, resharded_checkpoint_dir)
-    # wrap model at root
+    # Wrap model at root
     forward_signature = inspect.signature(model.forward.__func__)
     model = _xla_fsdp_wrap(model, use_grad_checkpoint=use_grad_checkpoint)
     model.forward.__func__.__signature__ = forward_signature
@@ -73,13 +73,6 @@ class LlamaXlaFsdpModel(LlamaModel):
             block = _xla_fsdp_wrap(block, use_grad_checkpoint=True)
             blocks.append(block)
 
-        # Debug - skip loading checkpoints for decoder layers
-        # for i in range(config.num_hidden_layers):
-        #     block = LlamaDecoderLayer(config)
-        #     block.apply(self._init_weights) 
-        #     block = _xla_fsdp_wrap(block, use_grad_checkpoint=True)
-        #     blocks.append(block)
-
         self.layers = nn.ModuleList(blocks)
 
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -94,11 +87,12 @@ class LlamaXlaFsdpModel(LlamaModel):
 
         self.gradient_checkpointing = False
 
-        # initialize weights and apply final processing
+        # Initialize weights and apply final processing
         self.post_init()
     
     def post_init(self):
         self.tie_weights()
+        # TODO: check if needed
         self._backward_compatibility_gradient_checkpointing()
 
 
@@ -116,9 +110,10 @@ class LlamaXlaFsdpForCausalLM(LlamaForCausalLM):
                 ckpt = torch.load(os.path.join(presharded_checkpoints, "lm_head.weight.bin"))
                 self.lm_head.weight = nn.Parameter(ckpt["lm_head.weight"].type(torch.float32))
 
-        # initialize weights and apply final processing
+        # Initialize weights and apply final processing
         self.post_init()
 
     def post_init(self):
         self.tie_weights()
+        # TODO: check if needed
         self._backward_compatibility_gradient_checkpointing()

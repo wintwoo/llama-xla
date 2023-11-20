@@ -15,7 +15,6 @@ def load_and_process_dataset(
     block_size: int = 1024,
     num_cores: int = 8,
 ):
-    # training dataset
     dataset = datasets.load_dataset(dataset_name, dataset_config_name)
     column_names = list(dataset[detect_columns_from_split].features)
     preproc_func = preproc_utils.get_preprocessed_dataset(dataset_name)
