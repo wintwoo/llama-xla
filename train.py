@@ -167,7 +167,7 @@ def main(index):
 
                 if args.save_steps and global_step % args.save_steps:
                     ckpt_name = f"ckpt_step_{global_step}"
-                    xm.master_print(f"Saving checkpoint {ckpt_name}")
+                    logger.info(f"Saving checkpoint {ckpt_name}")
                     model_utils.checkpoint_model(
                         model=model,
                         optimizer=optimizer,
@@ -176,12 +176,12 @@ def main(index):
                     )
                 
                 if global_step == args.max_steps:
-                    xm.master_print("Stopping training due to max_steps reached")
+                    logger.info("Stopping training due to max_steps reached")
                     break
 
             if args.save_steps is None and args.max_steps is None:
                 ckpt_name = f"ckpt_epoch_{epoch+1}"
-                xm.master_print(f"Saving checkpoint {ckpt_name}")
+                logger.info(f"Saving checkpoint {ckpt_name}")
                 model_utils.checkpoint_model(
                     model=model,
                     optimizer=optimizer,
