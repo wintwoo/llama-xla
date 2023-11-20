@@ -16,6 +16,7 @@ from transformers import (
 import torch_xla.distributed.parallel_loader as pl
 from torch_xla.amp.syncfree import AdamW
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from tqdm.auto import tqdm
 from threading import Thread
 from utils import (
@@ -82,8 +83,22 @@ def main(index):
         block_size=args.block_size,
     )
 
-    # data loader
-    data_loader = DataLoader(dataset[args.train_split], batch_size=args.batch_size)
+    # training data sampler
+    train_sampler = None
+    if xm.xrt_world_size() > 1:
+        train_sampler = DistributedSampler(
+            dataset[args.train_split],
+            num_replicas=xm.xrt_world_size(),
+            rank=xm.get_ordinal(),
+            shuffle=True,
+        )
+
+    # training data loader
+    data_loader = DataLoader(
+        dataset[args.train_split],
+        batch_size=args.batch_size,
+        sampler=train_sampler,
+    )
     data_loader = pl.MpDeviceLoader(data_loader, dev)
 
     # reshard model for checkpoint loading by layer
